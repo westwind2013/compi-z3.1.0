@@ -316,8 +316,8 @@ namespace crest {
     //
     // hEdit: error handler
     //
-    void error_handler(Z3_error_code e) {
-        fprintf(stderr, "Decoded error code: %s\n", Z3_get_error_msg(e) ); 
+    void error_handler(Z3_context ctx, Z3_error_code e) {
+        fprintf(stderr, "Decoded error code: %s\n", Z3_get_error_msg_ex(ctx, e) ); 
         exitf("incorrect use of Z3");
     }
 
@@ -327,6 +327,19 @@ namespace crest {
     void unreachable() {
         exitf("unreachable code was reached");
     }
+
+    Z3_solver mk_solver(Z3_context ctx) 
+    {    
+        Z3_solver s = Z3_mk_solver(ctx);
+        Z3_solver_inc_ref(ctx, s);
+        return s;
+    }
+
+    void del_solver(Z3_context ctx, Z3_solver s)
+    {    
+        Z3_solver_dec_ref(ctx, s);
+    }
+
 
     //
     // hEdit; create a logical context
@@ -391,37 +404,6 @@ namespace crest {
     Z3_ast mk_int(Z3_context ctx, int v) {
         Z3_sort ty = Z3_mk_int_sort(ctx);
         return Z3_mk_int(ctx, v, ty);
-    }
-
-
-    //
-    // hEdit: check whether the logical context is satisfiable, and compare 
-    // the result with the expected result. If the context is satisfiable, 
-    // then display the model.
-    //
-    void check(Z3_context ctx, Z3_lbool expected_result)
-    {
-        Z3_model m      = 0;
-        // Check if the logical context is satisfiable or not
-        Z3_lbool result = Z3_check_and_get_model(ctx, &m);
-        switch (result) {
-            case Z3_L_FALSE:
-                printf("unsat\n");
-                break;
-            case Z3_L_UNDEF:
-                printf("unknown\n");
-                printf("potential model:\n%s\n", Z3_model_to_string(ctx, m));
-                break;
-            case Z3_L_TRUE:
-                printf("sat\n%s\n", Z3_model_to_string(ctx, m));
-                break;
-        }
-        if (m) {
-            Z3_del_model(ctx, m);
-        }
-        if (result != expected_result) {
-            exitf("unexpected result");
-        }
     }
 
 
@@ -549,46 +531,56 @@ namespace crest {
 
         fprintf(out, "function interpretations:\n");
 
-        num_functions = Z3_get_model_num_funcs(c, m);
+        num_functions = Z3_model_get_num_funcs(c, m);
         for (i = 0; i < num_functions; i++) {
             Z3_func_decl fdecl;
             Z3_symbol name;
             Z3_ast func_else;
-            unsigned num_entries, j;
+            unsigned num_entries = 0, j;
 
-            fdecl = Z3_get_model_func_decl(c, m, i);
+            Z3_func_interp_opt finterp;
+
+            fdecl = Z3_model_get_func_decl(c, m, i);
+            finterp = Z3_model_get_func_interp(c, m, fdecl);
+            Z3_func_interp_inc_ref(c, finterp);
             name = Z3_get_decl_name(c, fdecl);
             display_symbol(c, out, name);
             fprintf(out, " = {");
-            num_entries = Z3_get_model_func_num_entries(c, m, i);
+            if (finterp)
+                num_entries = Z3_func_interp_get_num_entries(c, finterp);
             for (j = 0; j < num_entries; j++) {
                 unsigned num_args, k;
+                Z3_func_entry fentry = Z3_func_interp_get_entry(c, finterp, j);
+                Z3_func_entry_inc_ref(c, fentry);
                 if (j > 0) {
                     fprintf(out, ", ");
                 }
-                num_args = Z3_get_model_func_entry_num_args(c, m, i, j);
+                num_args = Z3_func_entry_get_num_args(c, fentry);
                 fprintf(out, "(");
                 for (k = 0; k < num_args; k++) {
                     if (k > 0) {
                         fprintf(out, ", ");
                     }
-                    display_ast(c, out, Z3_get_model_func_entry_arg(c, m, i, j, k));
+                    display_ast(c, out, Z3_func_entry_get_arg(c, fentry, k));
                 }
                 fprintf(out, "|->");
-                display_ast(c, out, Z3_get_model_func_entry_value(c, m, i, j));
+                display_ast(c, out, Z3_func_entry_get_value(c, fentry));
                 fprintf(out, ")");
+                Z3_func_entry_dec_ref(c, fentry);
             }
             if (num_entries > 0) {
                 fprintf(out, ", ");
             }
             fprintf(out, "(else|->");
-            func_else = Z3_get_model_func_else(c, m, i);
+            func_else = Z3_func_interp_get_else(c, finterp);
             display_ast(c, out, func_else);
             fprintf(out, ")}\n");
+            Z3_func_interp_dec_ref(c, finterp);
         }
     }
 
-    //
+
+  //
     // hEdit: custom model pretty printer.
     //
     void display_model(Z3_context c, FILE * out, Z3_model m)
@@ -596,10 +588,10 @@ namespace crest {
         unsigned num_constants;
         unsigned i;
 
-        num_constants = Z3_get_model_num_constants(c, m);
+        num_constants = Z3_model_get_num_consts(c, m);
         for (i = 0; i < num_constants; i++) {
             Z3_symbol name;
-            Z3_func_decl cnst = Z3_get_model_constant(c, m, i);
+            Z3_func_decl cnst = Z3_model_get_const_decl(c, m, i);
             Z3_ast a, v;
             Z3_bool ok;
             name = Z3_get_decl_name(c, cnst);
@@ -607,7 +599,7 @@ namespace crest {
             fprintf(out, " = ");
             a = Z3_mk_app(c, cnst, 0, 0);
             v = a;
-            ok = Z3_eval(c, m, a, &v);
+            ok = Z3_model_eval(c, m, a, 1, &v);
             display_ast(c, out, v);
             fprintf(out, "\n");
         }
@@ -736,10 +728,12 @@ namespace crest {
 
         // Create a logical context 
         Z3_context ctx_z3 = mk_context();
+        assert(ctx_z3);
+        // Create a solver
+        Z3_solver slv_z3 = mk_solver(ctx_z3);
+
         // Create an integer type
         Z3_sort int_ty_z3 = Z3_mk_int_sort(ctx_z3);
-        assert(ctx_z3);
-
         // Type limits.
         vector<Z3_ast> min_expr_z3(types::LONG_LONG+1);
         vector<Z3_ast> max_expr_z3(types::LONG_LONG+1);
@@ -768,8 +762,8 @@ namespace crest {
 
 #if USE_RANGE_CHECK
             // Assert the two constraints into the logical context
-            Z3_assert_cnstr(ctx_z3, min);
-            Z3_assert_cnstr(ctx_z3, max);
+            Z3_solver_assert(ctx_z3, slv_z3, min);
+            Z3_solver_assert(ctx_z3, slv_z3, max);
             DEBUG(fprintf(stderr, "MIN AST: %s\n", Z3_ast_to_string(ctx_z3, min)));
             DEBUG(fprintf(stderr, "MAX AST: %s\n", Z3_ast_to_string(ctx_z3, max)));
 #endif
@@ -790,31 +784,34 @@ namespace crest {
 
                 int pos = 0;
                 Z3_ast pred_z3 = ParseStatement(ctx_z3, x_expr_z3, s, &pos);
-                DEBUG(fprintf(stderr, "CHECK AST: %s\n", Z3_ast_to_string(ctx_z3, pred_z3)));
+                DEBUG(fprintf(stderr, "CHECK AST: %s\n", 
+                    Z3_ast_to_string(ctx_z3, pred_z3)));
                 
-                Z3_assert_cnstr(ctx_z3, pred_z3);
+                Z3_solver_assert(ctx_z3, slv_z3, pred_z3);
             }
         }
 
         Z3_model model_z3 = 0;
         // Check if the logical context is satisfiable
-        Z3_lbool success_z3 = Z3_check_and_get_model(ctx_z3, &model_z3);
+        Z3_lbool success_z3 = Z3_solver_check(ctx_z3, slv_z3);
        
 
 
 
         // Constraint set is satisfiable
         if (success_z3 == Z3_L_TRUE) {
+             model_z3 = Z3_solver_get_model(ctx_z3, slv_z3);
+
             // Get the number of constants assigned by the model
-            int num_constraints = Z3_get_model_num_constants(ctx_z3, model_z3);
+            int num_constraints = Z3_model_get_num_consts(ctx_z3, model_z3);
             
             for (int i = 0; i < num_constraints; i++) {
                 Z3_symbol name;
-                // Get the i-th constant in the model
-                Z3_func_decl cnst = Z3_get_model_constant(ctx_z3, model_z3, i);
                 Z3_ast a, v;
                 Z3_bool ok;
 
+                // Get the i-th constant in the model
+                Z3_func_decl cnst = Z3_model_get_const_decl(ctx_z3, model_z3, i);
                 DEBUG(display_model(ctx_z3, stderr, model_z3));
 
                 // Get the constant declaration name 
@@ -822,7 +819,7 @@ namespace crest {
                 // Create a constant
                 a = Z3_mk_app(ctx_z3, cnst, 0, 0);
                 v = a;
-                ok = Z3_eval(ctx_z3, model_z3, a, &v);
+                ok = Z3_model_eval(ctx_z3, model_z3, a, Z3_FALSE, &v);
                 int idx;
                 sscanf(Z3_get_symbol_string(ctx_z3, name), "x%d", &idx);
                 long val = strtol(Z3_get_numeral_string(ctx_z3, v), NULL, 0);
@@ -840,9 +837,10 @@ namespace crest {
             DEBUG(display_model(ctx_z3, stderr, model_z3));
         }
 
+        del_solver(ctx_z3, slv_z3);
         Z3_del_context(ctx_z3);
-        return success_z3;
+        
+        return Z3_L_TRUE == success_z3;
     }
-
 
 }  // namespace crest
