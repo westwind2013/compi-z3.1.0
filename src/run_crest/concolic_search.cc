@@ -40,6 +40,8 @@ using std::stable_sort;
 
 long long TIMEOUT_IN_SECONDS = 120;
 
+float solver_time = 0.0;
+
 namespace crest {
 
     namespace {
@@ -291,7 +293,7 @@ namespace crest {
 
 	void Search::RunProgram(const vector<value_t>& inputs, SymbolicExecution* ex) {
 		if (++num_iters_ > max_iters_) {
-
+fprintf(stderr, "\nThe total time for constraint solving is %f seconds\n\n", solver_time);
 			// TODO(jburnim): Devise a better system for capping the iterations.
 			exit(0);
 		}
@@ -538,9 +540,13 @@ namespace crest {
 			solver->GenerateConstraintsMPI(ex);
 		}
 
+clock_t tmp_time = clock();
 		// fprintf(stderr, "Yices . . . ");
 		bool success = solver->IncrementalSolve(ex.inputs(), ex.vars(), cs,
 				&soln);
+tmp_time = clock() - tmp_time;
+solver_time += (float)tmp_time / CLOCKS_PER_SEC;
+
 		// fprintf(stderr, "%d\n", success);
 		constraints[branch_idx]->Negate();
 
