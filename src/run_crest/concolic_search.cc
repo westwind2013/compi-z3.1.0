@@ -543,7 +543,7 @@ fprintf(stderr, "\nThe total time for constraint solving is %f seconds\n\n", sol
 clock_t tmp_time = clock();
 		// fprintf(stderr, "Yices . . . ");
 		bool success = solver->IncrementalSolve(ex.inputs(), ex.vars(), cs,
-				&soln);
+				&soln, world_size_indices_);
 tmp_time = clock() - tmp_time;
 solver_time += (float)tmp_time / CLOCKS_PER_SEC;
 

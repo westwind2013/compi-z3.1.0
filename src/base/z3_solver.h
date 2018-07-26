@@ -42,11 +42,13 @@ namespace crest {
 			bool IncrementalSolve(const vector<value_t>& old_soln,
 					const map<var_t,type_t>& vars,
 					vector<const SymbolicPred*>& constraints,
-					map<var_t,value_t>* soln);
+					map<var_t,value_t>* soln, 
+                    vector<int>& world_size_indices);
 
 			bool Solve(const map<var_t,type_t>& vars,
 					const vector<const SymbolicPred*>& constraints,
-					map<var_t,value_t>* soln);
+					map<var_t,value_t>* soln,
+                    vector<int>& world_size_indices);
 
 			bool ReadSolutionFromFileOrDie(const string& file,
 					map<var_t,value_t>* soln);

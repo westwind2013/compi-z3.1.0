@@ -155,7 +155,8 @@ namespace crest {
 	bool Z3Solver::IncrementalSolve(const vector<value_t>& old_soln,
 			const map<var_t,type_t>& vars,
 			vector<const SymbolicPred*>& constraints,
-			map<var_t,value_t>* soln) {
+			map<var_t,value_t>* soln, 
+            vector<int>& world_size_indices) {
 		
 		const SymbolicPred* pointer2Last = constraints.back();
 
@@ -254,7 +255,7 @@ namespace crest {
 
 		
 		soln->clear();
-		if (Solve(dependent_vars, dependent_constraints, soln)) {
+		if (Solve(dependent_vars, dependent_constraints, soln, world_size_indices)) {
 
             // 
             // hEdit: print the target constraint
@@ -720,9 +721,53 @@ namespace crest {
         return ret;
     }
 
+
+    void GetSolution(Z3_context& ctx_z3, Z3_solver& slv_z3, map<var_t, 
+            value_t>* soln, Z3_sort& int_ty_z3) {
+        
+        Z3_model model_z3 = Z3_solver_get_model(ctx_z3, slv_z3);
+
+        // Get the number of constants assigned by the model
+        int num_constraints = Z3_model_get_num_consts(ctx_z3, model_z3);
+
+        for (int i = 0; i < num_constraints; i++) {
+            Z3_symbol name;
+            Z3_ast a, v;
+            Z3_bool ok;
+
+            // Get the i-th constant in the model
+            Z3_func_decl cnst = Z3_model_get_const_decl(ctx_z3, model_z3, i);
+            DEBUG(display_model(ctx_z3, stderr, model_z3));
+
+            // Get the constant declaration name 
+            name = Z3_get_decl_name(ctx_z3, cnst);
+            // Create a constant
+            a = Z3_mk_app(ctx_z3, cnst, 0, 0);
+            v = a;
+            ok = Z3_model_eval(ctx_z3, model_z3, a, Z3_FALSE, &v);
+            int idx;
+            sscanf(Z3_get_symbol_string(ctx_z3, name), "x%d", &idx);
+            long val = strtol(Z3_get_numeral_string(ctx_z3, v), NULL, 0);
+
+            DEBUG(fprintf(stderr, "%s %s | x%d %ld\n",
+                        Z3_get_symbol_string(ctx_z3, name),
+                        Z3_get_numeral_string(ctx_z3, v),
+                        idx, val));
+            
+            (*soln)[idx] = val;
+fprintf(stderr, "x%d = %d\n", idx, (value_t)val);            
+            //soln->insert(make_pair(idx, val));
+        }
+        
+fprintf(stderr, "\n\n");            
+        return;
+    } 
+
+
     bool Z3Solver::Solve(const map<var_t,type_t>& vars,
             const vector<const SymbolicPred*>& constraints,
-            map<var_t,value_t>* soln) {
+            map<var_t,value_t>* soln, 
+            vector<int>& world_size_indices) {
 
         typedef map<var_t,type_t>::const_iterator VarIt;
 
@@ -791,50 +836,103 @@ namespace crest {
             }
         }
 
-        Z3_model model_z3 = 0;
+        //Z3_model model_z3 = 0;
         // Check if the logical context is satisfiable
         Z3_lbool success_z3 = Z3_solver_check(ctx_z3, slv_z3);
        
-
-
-
         // Constraint set is satisfiable
         if (success_z3 == Z3_L_TRUE) {
-             model_z3 = Z3_solver_get_model(ctx_z3, slv_z3);
 
-            // Get the number of constants assigned by the model
-            int num_constraints = Z3_model_get_num_consts(ctx_z3, model_z3);
+            GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
             
-            for (int i = 0; i < num_constraints; i++) {
-                Z3_symbol name;
-                Z3_ast a, v;
-                Z3_bool ok;
+            if (soln->find(world_size_indices[0]) != soln->end()) {
+                int lower = (*soln)[world_size_indices[0]] - 1;
+                int upper = 16;
+                int prev = lower;
 
-                // Get the i-th constant in the model
-                Z3_func_decl cnst = Z3_model_get_const_decl(ctx_z3, model_z3, i);
-                DEBUG(display_model(ctx_z3, stderr, model_z3));
+                while (lower + 1 < upper) {
+                    int mid = lower + (upper - lower)/2;
+                    //string mid_s = to_string(mid);
+                    Z3_ast bound = Z3_mk_int(ctx_z3, mid, int_ty_z3);
+                    Z3_ast args[1] = {Z3_mk_gt(ctx_z3, 
+                        x_expr_z3[world_size_indices[0]], bound) };
+                    Z3_lbool ret = Z3_solver_check_assumptions(ctx_z3, 
+                        slv_z3, 1, args);
+                    
+                    if (ret == Z3_L_TRUE) {
+                        lower = mid;    
+                    } else {
+                        upper = mid;    
+                    }
+                }
+                
+                if (prev <  lower) {
+                    // update the solution with a bigger value
+                    Z3_ast trial = Z3_mk_gt(ctx_z3, 
+                        x_expr_z3[world_size_indices[0]], 
+                        Z3_mk_int(ctx_z3, lower, int_ty_z3) );
+                    Z3_solver_assert(ctx_z3, slv_z3, trial);
+                    Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
+                    
+                    if (ret == Z3_L_TRUE) {
+                        GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
+                        fprintf(stderr, "Optimization 1 Succeeded!\n");        
+                    } else {
+                        fprintf(stderr, "Optimization 1 Failed!\n");        
+                    }
+                } 
+            } else {
+                int which = rand() % soln->size();
+                int ind, lower, upper, prev;
+                for (auto s: *soln) {
+                    ind = s.first;
+                    if(0 == which--) break;
+                }
 
-                // Get the constant declaration name 
-                name = Z3_get_decl_name(ctx_z3, cnst);
-                // Create a constant
-                a = Z3_mk_app(ctx_z3, cnst, 0, 0);
-                v = a;
-                ok = Z3_model_eval(ctx_z3, model_z3, a, Z3_FALSE, &v);
-                int idx;
-                sscanf(Z3_get_symbol_string(ctx_z3, name), "x%d", &idx);
-                long val = strtol(Z3_get_numeral_string(ctx_z3, v), NULL, 0);
+                // do not optimize upon a negative value
+                if((*soln)[ind] < 0) return true; 
+                
+                lower =  0;
+                upper = (*soln)[ind] + 1;
+                prev = upper;
 
-                DEBUG(fprintf(stderr, "%s %s | x%d %ld\n",
-                            Z3_get_symbol_string(ctx_z3, name),
-                            Z3_get_numeral_string(ctx_z3, v),
-                            idx, val));
-                soln->insert(make_pair(idx, val));
-            }
+                while (lower + 1 < upper) {
+                    int mid = lower + (upper - lower)/2;
+                    //string mid_s = to_string(mid);
+                    Z3_ast bound = Z3_mk_int(ctx_z3, mid, int_ty_z3);
+                    Z3_ast args[1] = {Z3_mk_lt(ctx_z3, 
+                        x_expr_z3[ind], bound) };
+                    Z3_lbool ret = Z3_solver_check_assumptions(ctx_z3, 
+                        slv_z3, 1, args);
+                    
+                    if (ret == Z3_L_TRUE) {
+                        upper = mid;    
+                    } else {
+                        lower = mid;    
+                    }
+                }
+                
+                if (prev > upper) {
+                    // update the solution with a bigger value
+                    Z3_ast trial = Z3_mk_lt(ctx_z3, 
+                        x_expr_z3[ind], Z3_mk_int(ctx_z3, upper, int_ty_z3) );
+                    Z3_solver_assert(ctx_z3, slv_z3, trial);
+                    Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
+
+                    if (ret == Z3_L_TRUE) {
+                        GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
+                        fprintf(stderr, "Optimization 2 Succeeded!\n");        
+                    } else {
+                        fprintf(stderr, "Optimization 2 Failed!\n");        
+                    }
+                } 
+            } 
         } else if (success_z3 == Z3_L_FALSE) {
             DEBUG(fprintf(stderr, "ERR:  fail to solve\n"));
+            //fprintf(stderr, "Z3_L_FALSE:  fail to solve\n");
         } else {
             DEBUG(fprintf(stderr, "ERR: unknown\n"));
-            DEBUG(display_model(ctx_z3, stderr, model_z3));
+            //fprintf(stderr, "Z3_L_UNDEF:  fail to solve\n");
         }
 
         del_solver(ctx_z3, slv_z3);
