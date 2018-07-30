@@ -846,7 +846,7 @@ fprintf(stderr, "\n\n");
             GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
             
             if (soln->find(world_size_indices[0]) != soln->end()) {
-                int lower = (*soln)[world_size_indices[0]] - 1;
+/*                int lower = (*soln)[world_size_indices[0]] - 1;
                 int upper = 16;
                 int prev = lower;
 
@@ -881,7 +881,7 @@ fprintf(stderr, "\n\n");
                         fprintf(stderr, "Optimization 1 Failed!\n");        
                     }
                 } 
-            } else {
+*/            } else {
                 int which = rand() % soln->size();
                 int ind, lower, upper, prev;
                 for (auto s: *soln) {
@@ -890,9 +890,9 @@ fprintf(stderr, "\n\n");
                 }
 
                 // do not optimize upon a negative value
-                if((*soln)[ind] < 0) return true; 
+                if((*soln)[ind] <= 1) return true; 
                 
-                lower =  0;
+                lower =  1;
                 upper = (*soln)[ind] + 1;
                 prev = upper;
 
@@ -914,8 +914,8 @@ fprintf(stderr, "\n\n");
                 
                 if (prev > upper) {
                     // update the solution with a bigger value
-                    Z3_ast trial = Z3_mk_lt(ctx_z3, 
-                        x_expr_z3[ind], Z3_mk_int(ctx_z3, upper, int_ty_z3) );
+                    Z3_ast trial = Z3_mk_eq(ctx_z3, 
+                        x_expr_z3[ind], Z3_mk_int(ctx_z3, upper-1, int_ty_z3) );
                     Z3_solver_assert(ctx_z3, slv_z3, trial);
                     Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
 

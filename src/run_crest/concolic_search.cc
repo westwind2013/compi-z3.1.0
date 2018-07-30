@@ -249,7 +249,7 @@ namespace crest {
             // determine which MPI rank to be tested
             target_rank_ = inputs[*rank_indices_.begin()];
         }
-        assert(target_rank_ < comm_world_size_);
+        if(target_rank_ >= comm_world_size_) target_rank_ = 0;
 
         if (!is_first_run) WriteInputToFileOrDie("input", inputs);
 
