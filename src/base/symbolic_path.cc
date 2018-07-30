@@ -218,7 +218,10 @@ namespace crest {
 
 		// Read the path.
 		s.read((char*)&len, sizeof(size_t));
-		branches_.resize(len);
+		if (s.fail() ) return false;
+
+
+        branches_.resize(len);
 		s.read((char*)&branches_.front(), len * sizeof(branch_id_t));
 		
 		// 
