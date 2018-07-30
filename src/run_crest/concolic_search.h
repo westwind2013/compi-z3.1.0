@@ -90,7 +90,7 @@ namespace crest {
 		private:
 			const string program_;
 			const int max_iters_;
-			int num_iters_;
+			size_t num_iters_;
 
 			//
 			// hEdit: add 2 arguments to the tool, i.e., *comm_world_size*

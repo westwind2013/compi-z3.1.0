@@ -42,6 +42,11 @@ long long TIMEOUT_IN_SECONDS = 120;
 
 float solver_time = 0.0;
 
+// 
+// hEdit: fix the focus process within the first threshold tests
+//
+size_t threshold = 100;
+
 namespace crest {
 
     namespace {
@@ -235,17 +240,16 @@ namespace crest {
         string program_clean = program_ + "_c";
         string command;
 
-        // Temporary fix for a bug that occurs at a rare chance. This bug manifests as too many processes run. 
-        int tmp_rank = target_rank_, tmp_size = comm_world_size_;
-        // determine which MPI rank to be tested
-        target_rank_ = rank_indices_.empty() ? target_rank_: inputs[*rank_indices_.begin()];
-        // determine the size of MPI_COMM_WORLD
-        comm_world_size_ = world_size_indices_.empty() ? comm_world_size_: inputs[*world_size_indices_.begin()];
-        if (target_rank_ < 0 || target_rank_ >= tmp_size || tmp_size > 16) {
-            target_rank_ = tmp_rank;
-            comm_world_size_ = tmp_size; 
+        // Fix the focus in the first threshold tests  
+        if (!world_size_indices_.empty() && inputs[*world_size_indices_.begin()] < 16) {
+            // determine the size of MPI_COMM_WORLD
+            comm_world_size_ = inputs[*world_size_indices_.begin()];
         }
-
+        if (num_iters_ > threshold && !rank_indices_.empty()) {
+            // determine which MPI rank to be tested
+            target_rank_ = inputs[*rank_indices_.begin()];
+        }
+        assert(target_rank_ < comm_world_size_);
 
         if (!is_first_run) WriteInputToFileOrDie("input", inputs);
 
@@ -564,7 +568,7 @@ solver_time += (float)tmp_time / CLOCKS_PER_SEC;
             for (SolnIt i = soln.begin(); i != soln.end(); ++i) {
                 (*input)[i->first] = i->second;
 
-                if (num_iters_ > 100) {
+                //if (num_iters_ > 100) {
                     for (size_t i = 0; i < rank_non_default_comm_indices_.size(); i++) {
                         if (original_rank_non_default[i] != (*input)[rank_non_default_comm_indices_[i]]){
 
@@ -586,7 +590,7 @@ solver_time += (float)tmp_time / CLOCKS_PER_SEC;
                             break;
                         }	
                     }
-                }
+                //}
 			}
 			return true;
 		}
