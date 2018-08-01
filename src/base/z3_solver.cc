@@ -882,11 +882,21 @@ fprintf(stderr, "\n\n");
                     }
                 } 
 */            } else {
+/*
                 int which = rand() % soln->size();
                 int ind, lower, upper, prev;
                 for (auto s: *soln) {
                     ind = s.first;
                     if(0 == which--) break;
+                }
+*/
+                int lower, upper, prev, ind;
+                int largest = -1;
+                for(auto &s: *soln) {
+                    if (s.second > largest) {
+                        largest = s.second;
+                        ind = s.first;
+                    }    
                 }
 
                 // do not optimize upon a negative value
