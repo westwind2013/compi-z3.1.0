@@ -241,7 +241,7 @@ namespace crest {
         string command;
 
         // Fix the focus in the first threshold tests  
-        if (!world_size_indices_.empty() && inputs[*world_size_indices_.begin()] < 16) {
+        if (!world_size_indices_.empty() && inputs[*world_size_indices_.begin()] <= 16) {
             // determine the size of MPI_COMM_WORLD
             comm_world_size_ = inputs[*world_size_indices_.begin()];
         }
