@@ -119,16 +119,17 @@ namespace crest {
 			constraintsMPI.push_back(tmpPred);
 
 			// delete unwanted resources
-			delete world_size_first;
+			//delete world_size_first;
 		}
 
 		// (5) the size of MPI_COMM_WORLD must be smaller than 
-		//if (world_size_first) {
-		//	*world_size_first -= 4;
-		//	tmpPred = new SymbolicPred(ops::LE, world_size_first);
-		//	constraintsMPI.push_back(tmpPred);
-		//}
+		if (world_size_first) {
+			*world_size_first -= 16;
+			tmpPred = new SymbolicPred(ops::LE, world_size_first);
+			constraintsMPI.push_back(tmpPred);
+		}
 
+/*
 		if (!ex.limits_.empty()) {
 			for (auto limit: ex.limits_) {
 				tmp_expr = new SymbolicExpr(1, limit.first);
@@ -137,7 +138,7 @@ namespace crest {
 				constraintsMPI.push_back(tmpPred);
 			}
 		}
-
+*/
 		//string str;
 		//tmpPred->AppendToString(&str);
 		//printf("%s\n", str.c_str());	
