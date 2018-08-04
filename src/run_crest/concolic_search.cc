@@ -678,9 +678,18 @@ DFS(i+1, cur_ex);
 
 		const SymbolicPath& path = prev_ex.path();
 
-		for (size_t i = pos; (i < path.constraints().size()) && (depth > 0); i++) {
-			// Solve constraints[0..i].
-			if (!SolveAtBranch(prev_ex, i, &input)) {
+        // Solve constraints[0..i].
+        for (size_t i = pos; (i < path.constraints().size()) && (depth > 0); i++) {
+            
+            /*
+            branch_id_t opposite_branch = paired_branch_[
+                path.branches()[path.constraints_idx()[i]]];
+            if(total_covered_[opposite_branch]) {
+                continue;
+            }
+            */
+
+            if (!SolveAtBranch(prev_ex, i, &input)) {
 				continue;
 			}
 

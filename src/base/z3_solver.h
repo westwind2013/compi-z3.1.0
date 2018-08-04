@@ -21,6 +21,7 @@
 
 using std::map;
 using std::vector;
+using std::set;
 
 namespace crest {
 
@@ -48,6 +49,7 @@ namespace crest {
 			bool Solve(const map<var_t,type_t>& vars,
 					const vector<const SymbolicPred*>& constraints,
 					map<var_t,value_t>* soln,
+                    set<var_t>& target_vars,
                     vector<int>& world_size_indices);
 
 			bool ReadSolutionFromFileOrDie(const string& file,

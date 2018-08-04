@@ -392,29 +392,30 @@ stack_.clear();
 		mem_[addr] = new SymbolicExpr(1, num_inputs_);
 		ex_.mutable_vars()->insert(make_pair(num_inputs_, type));
 
-		value_t ret = 0;
-		if (num_inputs_ < ex_.inputs().size()) {
-			ret = ex_.inputs()[num_inputs_];
-		} else {
-			//
-                        // hEdit: get random paramters obtained from the tool
-                        //
-			
-			//if (rand_params_.size() > num_inputs_)
-			//	ret = CastTo(rand_params_[num_inputs_], type);
-			//else
-			//{
-				// When new marked variables is found, we need to
-				// generate new values for them. 
-				ret = CastTo(rand() % limit, type);	
-				// 
-				// hEdit: synchronize the value among all processes
-				//
-				MPI_Bcast(&ret, 1, MPI_LONG_LONG_INT, 0, MPI_COMM_WORLD);
-			
-			//}
-			ex_.mutable_inputs()->push_back(ret);
-		}
+        value_t ret = 0;
+        if (num_inputs_ < ex_.inputs().size()) {
+            ret = ex_.inputs()[num_inputs_];
+        } else {
+            //
+            // hEdit: get random paramters obtained from the tool
+            //
+
+            //if (rand_params_.size() > num_inputs_)
+            //	ret = CastTo(rand_params_[num_inputs_], type);
+            //else
+            //{
+            // When new marked variables is found, we need to
+            // generate new values for them. 
+            //ret = CastTo(rand() % limit, type);	
+            ret = CastTo(1, type);	
+            // 
+            // hEdit: synchronize the value among all processes
+            //
+            MPI_Bcast(&ret, 1, MPI_LONG_LONG_INT, 0, MPI_COMM_WORLD);
+
+            //}
+            ex_.mutable_inputs()->push_back(ret);
+        }
 
 		num_inputs_++;
 
@@ -448,28 +449,28 @@ stack_.clear();
 			// hEdit: process of MPI rank 0 is first tested
 			//
 			ret = CastTo(rank_, type);
-			ex_.mutable_inputs()->push_back(ret);
+            ex_.mutable_inputs()->push_back(ret);
 
-			//
-                        // hEdit: padd the vecotor *rand_params_* so as to make
-                        // other variables marked as symbolic take the CORRECT
-                        // values from the vector. 
-                        //
-                        //if (num_inputs_ < rand_params_.size())
-			//	rand_params_.insert(rand_params_.begin() + num_inputs_, rank_);
-			//else
-			//	rand_params_.push_back(rank_);
+            //
+            // hEdit: padd the vecotor *rand_params_* so as to make
+            // other variables marked as symbolic take the CORRECT
+            // values from the vector. 
+            //
+            //if (num_inputs_ < rand_params_.size())
+            //	rand_params_.insert(rand_params_.begin() + num_inputs_, rank_);
+            //else
+            //	rand_params_.push_back(rank_);
 
-		}
-		
-		//
-		// hEdit: wirte the index of variables of MPI rank into a file for
-		// later use
-		//
-		if (target_rank_ == rank_) {
-			ex_.rank_indices_.push_back(num_inputs_);
-			//outfile_rank_indices << num_inputs_ << std::endl;
-		}
+        }
+
+        //
+        // hEdit: wirte the index of variables of MPI rank into a file for
+        // later use
+        //
+        if (target_rank_ == rank_) {
+            ex_.rank_indices_.push_back(num_inputs_);
+            //outfile_rank_indices << num_inputs_ << std::endl;
+        }
 
 		num_inputs_++;
 
@@ -493,26 +494,26 @@ stack_.clear();
 		value_t ret = 0;
 		if (num_inputs_ < ex_.inputs().size()) {
 			ret = ex_.inputs()[num_inputs_];
-		} else {
-			//
-			// hEdit: the value will be overwritten by the call of MPI_Comm_rank
-			// and thus it is given 0
-			//
-			ret = CastTo(0, type);
-			ex_.mutable_inputs()->push_back(ret);
+        } else {
+            //
+            // hEdit: the value will be overwritten by the call of MPI_Comm_rank
+            // and thus it is given 0
+            //
+            ret = CastTo(0, type);
+            ex_.mutable_inputs()->push_back(ret);
 
-			//
-                        // hEdit: padd the vecotor *rand_params_* so as to make
-                        // other variables marked as symbolic take the CORRECT
-                        // values from the vector. 
-                        //
-                        //if (num_inputs_ < rand_params_.size())
-			//	rand_params_.insert(rand_params_.begin() + num_inputs_, rank_);
-			//else
-			//	rand_params_.push_back(rank_);
+            //
+            // hEdit: padd the vecotor *rand_params_* so as to make
+            // other variables marked as symbolic take the CORRECT
+            // values from the vector. 
+            //
+            //if (num_inputs_ < rand_params_.size())
+            //	rand_params_.insert(rand_params_.begin() + num_inputs_, rank_);
+            //else
+            //	rand_params_.push_back(rank_);
 
 
-		}
+        }
 		
 		//
 		// hEdit: wirte the index of variables of MPI rank into a file for
@@ -543,26 +544,26 @@ stack_.clear();
 		value_t ret = 0;
 		if (num_inputs_ < ex_.inputs().size()) {
 			ret = ex_.inputs()[num_inputs_];
-		} else {
-			//
-			// hEdit:  we first make the size of MPI_COMM_WORLD 4
-			//
-			ret = CastTo(world_size_, type);
-			ex_.mutable_inputs()->push_back(ret);
-			//std::cout << "debug: world_size" << ret 
-			//	<< " : target_rank " << target_rank_ 
-			//	<< " : rank " << rank_ << std::endl;
- 			
-			//
-                        // hEdit: padd the vecotor *rand_params_* so as to make
-                        // other variables marked as symbolic take the CORRECT
-                        // values from the vector. 
-                        //
-                        //if (num_inputs_ < rand_params_.size())
-			//	rand_params_.insert(rand_params_.begin() + num_inputs_, world_size_);
-			//else 
-			//	rand_params_.push_back(world_size_);
-		}
+        } else {
+            //
+            // hEdit:  we first make the size of MPI_COMM_WORLD 4
+            //
+            ret = CastTo(world_size_, type);
+            ex_.mutable_inputs()->push_back(ret);
+            //std::cout << "debug: world_size" << ret 
+            //	<< " : target_rank " << target_rank_ 
+            //	<< " : rank " << rank_ << std::endl;
+
+            //
+            // hEdit: padd the vecotor *rand_params_* so as to make
+            // other variables marked as symbolic take the CORRECT
+            // values from the vector. 
+            //
+            //if (num_inputs_ < rand_params_.size())
+            //	rand_params_.insert(rand_params_.begin() + num_inputs_, world_size_);
+            //else 
+            //	rand_params_.push_back(world_size_);
+        }
 
 		//
 		// hEdit: wirte the index of variables of MPI_COMM_WORLD
