@@ -28,6 +28,7 @@ using std::make_pair;
 using std::numeric_limits;
 using std::queue;
 using std::set;
+using std::unordered_set;
 
 #define DEBUG(x) 
 
@@ -159,7 +160,7 @@ namespace crest {
 			const map<var_t,type_t>& vars,
 			vector<const SymbolicPred*>& constraints,
 			map<var_t,value_t>* soln, 
-            vector<int>& world_size_indices) {
+            unordered_set<int>& excls) {
 		
 		const SymbolicPred* pointer2Last = constraints.back();
 
@@ -262,7 +263,7 @@ namespace crest {
         soln->clear();
 
 		if (Solve(dependent_vars, dependent_constraints, soln, target_vars, 
-            world_size_indices)) {
+            excls)) {
 
             // 
             // hEdit: print the target constraint
@@ -762,28 +763,38 @@ namespace crest {
                         idx, val));
             
             (*soln)[idx] = val;
-fprintf(stderr, "x%d = %d\n", idx, (value_t)val);            
+//fprintf(stderr, "x%d = %d\n", idx, (value_t)val);            
             //soln->insert(make_pair(idx, val));
         }
         
-fprintf(stderr, "\n\n");            
+//fprintf(stderr, "\n\n");            
 return;
     } 
 
-    bool OptimizeGroup(Z3_context& ctx_z3, Z3_solver& slv_z3, map<var_t, value_t>* soln, 
-        map<var_t,Z3_ast>& x_expr_z3, Z3_sort& int_ty_z3) {
+    void OptimizeGroup(Z3_context& ctx_z3, Z3_solver& slv_z3, map<var_t, value_t>* soln, 
+        map<var_t,Z3_ast>& x_expr_z3, Z3_sort& int_ty_z3, unordered_set<int>& excls) {
 
         value_t lower, upper, prev;
         value_t largest = -1;
         for(auto &s: *soln) {
-            if (s.second > largest) {
+            if (s.second > largest && excls.find(s.first) == excls.end() ) {
                 largest = s.second;
             }    
         }
 
         // do not optimize upon a negative value
-        if(largest < 2) return true; 
+        if(largest < 2) return; 
 
+        // fix some  values
+        for(auto &s: *soln) {
+            if (excls.find(s.first) != excls.end() ) {
+                Z3_ast val = Z3_mk_int(ctx_z3, s.second, int_ty_z3);
+                Z3_ast tmp = Z3_mk_eq(ctx_z3, x_expr_z3[s.first], val);
+                Z3_solver_assert(ctx_z3, slv_z3, tmp);
+            }    
+        }
+
+        
         lower =  1;
         prev = upper = largest + 1;
         
@@ -807,6 +818,15 @@ return;
             }
         }
 
+        Z3_ast bound = Z3_mk_int(ctx_z3, upper, int_ty_z3);
+        for (auto &s: *soln) {
+            if (excls.find(s.first) == excls.end() ) {
+                Z3_solver_assert(ctx_z3, slv_z3, Z3_mk_lt(
+                            ctx_z3, x_expr_z3[s.first], bound) );
+            }
+        }
+
+/*
         if (prev > upper) {
             // update the solution with a bigger value
             Z3_ast bound = Z3_mk_int(ctx_z3, upper, int_ty_z3);
@@ -822,19 +842,27 @@ return;
                 return true;
             }
         }
+*/
 
-        fprintf(stderr, "Optimization 1 Failed!\n");        
-        return false;
+        return;
     }
 
 
-    bool OptimizeSingle(Z3_context& ctx_z3, Z3_solver& slv_z3, map<var_t, value_t>* soln, 
-        var_t target, map<var_t,Z3_ast>& x_expr_z3, Z3_sort& int_ty_z3) {
+    void OptimizeSingle(Z3_context& ctx_z3, Z3_solver& slv_z3, map<var_t, value_t>* soln, 
+        var_t target, map<var_t,Z3_ast>& x_expr_z3, Z3_sort& int_ty_z3, unordered_set<int>& excls) {
 
         value_t lower, upper, prev;
-        
+
         // do not optimize upon a negative value
-        if ((*soln)[target] < 2) return true;
+        if ((*soln)[target] < 2) {
+            Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
+            if (ret == Z3_L_TRUE) {
+                GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
+                fprintf(stderr, "Optimization 1\n");
+            }
+
+            return;
+        }
 
         lower =  1;
         prev = upper = (*soln)[target] + 1;
@@ -857,27 +885,25 @@ return;
 
         if (prev > upper) {
             // update the solution with a bigger value
-            Z3_ast trial = Z3_mk_eq(ctx_z3, 
-                    x_expr_z3[target], Z3_mk_int(ctx_z3, upper-1, int_ty_z3) );
+            Z3_ast trial = Z3_mk_lt(ctx_z3, 
+                    x_expr_z3[target], Z3_mk_int(ctx_z3, upper, int_ty_z3) );
             Z3_solver_assert(ctx_z3, slv_z3, trial);
             Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
 
             if (ret == Z3_L_TRUE) {
                 GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
-                fprintf(stderr, "Optimization 1 Succeeded!\n");
-                return true;
+                fprintf(stderr, "Optimization 2\n");
             }
         }
 
-        fprintf(stderr, "Optimization 1 Failed!\n");        
-        return false;
+        return;
     }
     
     bool Z3Solver::Solve(const map<var_t,type_t>& vars,
             const vector<const SymbolicPred*>& constraints,
             map<var_t,value_t>* soln, 
             set<var_t>& target_vars,
-            vector<int>& world_size_indices) {
+            unordered_set<int>& excls) {
 
         typedef map<var_t,type_t>::const_iterator VarIt;
 
@@ -955,16 +981,29 @@ return;
 
             GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
             
-            if (soln->find(world_size_indices[0]) == soln->end()) {
-                OptimizeGroup(ctx_z3, slv_z3, soln, 
-                    x_expr_z3, int_ty_z3);
+            OptimizeGroup(ctx_z3, slv_z3, soln, 
+                    x_expr_z3, int_ty_z3, excls);
 
-                if (target_vars.size() == 1) {
-                    for (auto &t: target_vars) {
-                        OptimizeSingle(ctx_z3, slv_z3, soln, t,
-                            x_expr_z3, int_ty_z3);
+            if (target_vars.size() == 1) {
+                for (auto &t: target_vars) {
+                    if (excls.find(t) != excls.end() ) {
+                        Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
+                        if (ret == Z3_L_TRUE) {
+                            GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
+                            fprintf(stderr, "Optimization 1\n");
+                        }
+
+                        break;
                     }
-                } 
+                    OptimizeSingle(ctx_z3, slv_z3, soln, t,
+                            x_expr_z3, int_ty_z3, excls);
+                }
+            } else {
+                Z3_lbool ret = Z3_solver_check(ctx_z3, slv_z3);
+                if (ret == Z3_L_TRUE) {
+                    GetSolution(ctx_z3, slv_z3, soln, int_ty_z3);
+                    fprintf(stderr, "Optimization 1\n");
+                }
             }
 
         } else if (success_z3 == Z3_L_FALSE) {

@@ -33,6 +33,7 @@ using std::pair;
 using std::queue;
 using std::random_shuffle;
 using std::stable_sort;
+using std::unordered_map;
 
 // 
 // hEdit: set the time limit for a command running
@@ -41,6 +42,9 @@ using std::stable_sort;
 long long TIMEOUT_IN_SECONDS = 120;
 
 float solver_time = 0.0;
+
+int persistence_  = 0;
+int persistence_threshold = 50;
 
 // 
 // hEdit: fix the focus process within the first threshold tests
@@ -252,6 +256,13 @@ namespace crest {
         if(target_rank_ >= comm_world_size_) target_rank_ = 0;
 
         if (!is_first_run) WriteInputToFileOrDie("input", inputs);
+
+if (comm_world_size_ == 1) {
+        if (persistence_ ++ > persistence_threshold)
+                comm_world_size_ = 8;
+}
+else persistence_ = 0;
+
 
         // assemble the command together
         if (0 != target_rank_) {
@@ -544,10 +555,14 @@ fprintf(stderr, "\nThe total time for constraint solving is %f seconds\n\n", sol
 			solver->GenerateConstraintsMPI(ex);
 		}
 
+        unordered_set<int> excls;
+        for (auto &i: world_size_indices_) excls.insert(i);
+        //for (auto &i: rank_indices_) excls.insert(i);
+        //for (auto &i: rank_non_default_comm_indices_) excls.insert(i);
 clock_t tmp_time = clock();
 		// fprintf(stderr, "Yices . . . ");
 		bool success = solver->IncrementalSolve(ex.inputs(), ex.vars(), cs,
-				&soln, world_size_indices_);
+				&soln, excls);
 tmp_time = clock() - tmp_time;
 solver_time += (float)tmp_time / CLOCKS_PER_SEC;
 

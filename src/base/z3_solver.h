@@ -20,8 +20,10 @@
 #include "base/symbolic_execution.h"
 
 using std::map;
+using std::unordered_map;
 using std::vector;
 using std::set;
+using std::unordered_set;
 
 namespace crest {
 
@@ -44,13 +46,13 @@ namespace crest {
 					const map<var_t,type_t>& vars,
 					vector<const SymbolicPred*>& constraints,
 					map<var_t,value_t>* soln, 
-                    vector<int>& world_size_indices);
+                    unordered_set<int>& excls);
 
 			bool Solve(const map<var_t,type_t>& vars,
 					const vector<const SymbolicPred*>& constraints,
 					map<var_t,value_t>* soln,
                     set<var_t>& target_vars,
-                    vector<int>& world_size_indices);
+                    unordered_set<int>& excls);
 
 			bool ReadSolutionFromFileOrDie(const string& file,
 					map<var_t,value_t>* soln);
