@@ -470,6 +470,7 @@ fprintf(stderr, "\nThe total time for constraint solving is %f seconds\n\n", sol
 				"Iteration %d (%lds): covered %u branches [%u reach funs, %u reach branches].\n",
 				num_iters_, time(NULL) - start_time_, total_num_covered_,
 				reachable_functions_, reachable_branches_);
+        fprintf(stderr, "\nThe total time for constraint solving is %f seconds\n\n", solver_time);
 
 		bool found_new_branch = (num_covered_ > prev_covered_);
 		if (found_new_branch) {
