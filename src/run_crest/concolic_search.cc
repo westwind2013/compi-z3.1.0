@@ -255,14 +255,14 @@ namespace crest {
         }
         if(target_rank_ >= comm_world_size_) target_rank_ = 0;
 
-        if (!is_first_run) WriteInputToFileOrDie("input", inputs);
-
 if (comm_world_size_ == 1) {
         if (persistence_ ++ > persistence_threshold)
                 comm_world_size_ = 8;
 }
 else persistence_ = 0;
 
+
+        if (!is_first_run) WriteInputToFileOrDie("input", inputs);
 
         // assemble the command together
         if (0 != target_rank_) {
