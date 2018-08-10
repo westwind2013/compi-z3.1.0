@@ -19,6 +19,11 @@
 #include <queue>
 #include <utility>
 #include <iostream>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <string>
+#include <cstring>
+#include <unistd.h>
 
 #include "base/z3_solver.h"
 #include "run_crest/concolic_search.h"
@@ -234,6 +239,125 @@ namespace crest {
 		fclose(f);
 	}
 
+
+    void Search::LaunchProgram(const vector<value_t>& inputs) {
+
+        string program_clean = program_ + "_c";
+        string command;
+
+        // Fix the focus in the first threshold tests  
+        if (!world_size_indices_.empty() &&
+                inputs[*world_size_indices_.begin()] <= 16) {
+            // determine the size of MPI_COMM_WORLD
+            comm_world_size_ = inputs[*world_size_indices_.begin()];
+        }
+        if (num_iters_ > threshold && !rank_indices_.empty()) {
+            // determine which MPI rank to be tested
+            target_rank_ = inputs[*rank_indices_.begin()];
+        }
+        if(target_rank_ >= comm_world_size_) target_rank_ = 0;
+
+        if (!is_first_run) WriteInputToFileOrDie("input", inputs);
+
+
+        // assemble the command together
+        char* command2[20];
+        int i = 0;
+
+        command2[i++] = "/usr/bin/mpirun";
+        if (0 != target_rank_) {
+            command2[i++] = "-np";
+            command2[i++] = const_cast<char *> (
+                    (std::to_string((long long)target_rank_)).c_str());
+            command2[i++] = const_cast<char *> (program_clean.c_str());
+            command2[i++] = ":";
+
+            command2[i++] = "-np";
+            command2[i++] = "1";
+            command2[i++] = const_cast<char *> (program_.c_str());
+            if (target_rank_ + 1 < comm_world_size_) {
+
+                command2[i++] = ":";
+                command2[i++] = "-np";
+                command2[i++] = const_cast<char *> (
+                        (std::to_string((long long)comm_world_size_
+                                        - target_rank_ - 1)).c_str());
+                command2[i++] = const_cast<char *> (program_clean.c_str());
+            }
+        } else {
+            command2[i++] = "-np";
+            command2[i++] = "1";
+            command2[i++] = const_cast<char *> (program_.c_str());
+            command2[i++] = ":";
+
+            command2[i++] = "-np";
+            command2[i++] = const_cast<char *> (
+                    (std::to_string((long long)comm_world_size_
+                                    - 1)).c_str());
+            command2[i++] = const_cast<char *> (program_clean.c_str());
+        }
+        command2[i++] = NULL;
+
+        std::ofstream outfile(".target_rank");
+        outfile << target_rank_;
+        outfile.close();
+
+        for (int j = 0; j < i; j++) {
+            fprintf(stderr, "%s ", command2[j]);
+        }
+        fprintf(stderr, "\n");
+
+        int ret = 0;
+        int id = fork();
+        if (id < 0){
+            fprintf(stderr, "failed to fork\n");
+        } else if (id == 0) {
+            fprintf(stderr, "Child\n");
+            execv(command2[0], command2);
+            exit(0);
+        } else {
+            int pid, status;
+            bool time_over = false;
+            time_t begin = time(NULL);
+            while(waitpid(id, &status, WNOHANG) != -1) {
+                if (time(NULL) - begin > TIMEOUT_IN_SECONDS) {
+                    kill (id, 9);
+                    time_over = true;
+                }
+            }
+            if (time_over) {
+                fprintf(stderr, "TIMEOUT: KILLED (%d)\n",
+                        time(NULL) - begin);
+                ret = -1;
+                waitpid(id, &status, 0);
+            } else if (WIFSIGNALED(status) != 0) {
+                ret = -2;
+            } else if (WIFEXITED(status) != 0) {
+                ret = WEXITSTATUS(status);
+            } else {
+                ret = -3;
+            }
+
+            fprintf(stderr, "Parent\n");
+        }
+
+        // if the command is terminated by the specified timeout
+        if (0 != ret) {
+            // log the triggered input 
+            outfile_illegal_inputs << num_iters_ <<
+                "Return value" << ret << std::endl;
+            outfile_illegal_inputs << command << std::endl << std::endl;
+            string tmp("mv input input.");
+            tmp += std::to_string(num_iters_);
+            system(tmp.c_str() );
+        }
+
+        // debug
+        command += "\n";
+        is_first_run = false;
+    }
+
+/*
 	//
 	// hEdit: pass synchronized inputs to all processes. The 
 	// input is generated randomly for the first run, and 
@@ -305,6 +429,9 @@ else persistence_ = 0;
         is_first_run = false;
         //}
     }
+*/
+
+
 
 	void Search::RunProgram(const vector<value_t>& inputs, SymbolicExecution* ex) {
 		if (++num_iters_ > max_iters_) {
