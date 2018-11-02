@@ -1,3 +1,4 @@
+# Some directories
 log
 mpi/
 src/process_cfg/process_cfg
@@ -8,8 +9,6 @@ test/heat/
 test/mpi_comm/
 test/sendrecv/
 test/sendrecv2/
-
-*.swp
 
 # Compiled Object files
 *.slo
@@ -24,3 +23,7 @@ test/sendrecv2/
 *.lai
 *.la
 *.a
+
+# Trivial
+*.swp
+
